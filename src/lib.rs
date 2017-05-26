@@ -1,13 +1,9 @@
 #[macro_use]
 extern crate nom;
-extern crate regex;
-extern crate itertools;
 
-use std::io;
 use std::str;
 
-use itertools::Itertools;
-use nom::{IResult, not_line_ending, line_ending, multispace, space, rest};
+use nom::{not_line_ending, line_ending};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Record<'a> {
@@ -16,7 +12,7 @@ pub struct Record<'a> {
     pub qual: Option<&'a [u8]>
 }
 
-named!(parse_fasta<&[u8], Vec<Record>>,
+named!(pub parse_fasta<&[u8], Vec<Record>>,
     many1!(do_parse!(
         tag!(">") >>
         id: map_res!(not_line_ending, str::from_utf8) >> line_ending >>
@@ -37,7 +33,7 @@ named!(quality_scores,
     )
 );
 
-named!(parse_fastq<&[u8], Vec<Record>>,
+named!(pub parse_fastq<&[u8], Vec<Record>>,
     many1!(dbg_dmp!(do_parse!(
         tag!("@") >>
         id: map_res!(not_line_ending, str::from_utf8) >> line_ending >>
@@ -69,4 +65,6 @@ mod tests {
         assert_eq!(rec1, records[0]);
         assert_eq!(rec2, records[1]);
     }
+
+
 }

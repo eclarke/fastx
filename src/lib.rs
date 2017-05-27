@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate nom;
+extern crate itertools;
 
-use std::io::{self, BufReader, Read};
-use std::fs::File;
+use std::io;
 
 use nom::IResult;
 
@@ -11,7 +11,6 @@ use internals::*;
 pub use internals::Record;
 
 const FA_REC: u8 = '>' as u8;
-const FQ_REC: u8 = '@' as u8;
 
 pub struct Records<R: io::BufRead> {
     input: R,
@@ -29,7 +28,6 @@ impl<'a, R: io::BufRead> Records<R> {
     }
 
     pub fn from_fastq(input: R) -> Records<R> {
-        let mut input = input;
         Records {
             input,
             parser: read_fastq
@@ -49,23 +47,10 @@ fn read_fasta<R: io::BufRead>(reader: &mut R) -> Option<Record> {
     let mut buf = Vec::new();
     reader.read_until(FA_REC, &mut buf).expect("fasta parser: error while reading from input!");
     buf.insert(0, FA_REC);
-        
-    let rec = match buf.last() {
-        Some(&FA_REC) => Some(parse_single_fasta(&buf)),
-        Some(_) => {
-            &buf.extend(&[FA_REC]);
-            Some(parse_single_fasta(&buf))
-        },
-        None => None,
-    };
 
-    match rec {
-        Some(IResult::Done(extra, record)) => {
-            Some(record)
-        },
-        Some(IResult::Incomplete(_)) => {println!("Incomplete!"); None},
-        Some(IResult::Error(_)) => {println!("Error!"); None},
-        None => None
+    match parse_single_fasta(&buf[..buf.len()]) {
+        IResult::Done(_, record) => Some(record),
+        _ => None,
     }
 }
 
@@ -98,10 +83,12 @@ fn read_fastq<R: io::BufRead>(reader: &mut R) -> Option<Record> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::BufReader;
     use super::*;
     #[test]
     fn test_fasta_reader() {
-        let fa = BufReader::new(File::open("tests/test.fa").unwrap());
+        let fa = BufReader::new(File::open("tests/test_data/test.fa").unwrap());
         let mut records = Records::from_fasta(fa);
         let rec1 = records.next();
         let rec2 = records.next();
@@ -126,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_fastq_reader() {
-        let fq = BufReader::new(File::open("tests/test.fq").unwrap());
+        let fq = BufReader::new(File::open("tests/test_data/test.fq").unwrap());
         let mut records = Records::from_fastq(fq);
         let rec1 = records.next();
         let rec2 = records.next();

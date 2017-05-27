@@ -1,6 +1,5 @@
 use std::str;
-use std::slice;
-use std::ops::Deref;
+use itertools::Itertools;
 
 use nom::{not_line_ending, line_ending, rest};
 
@@ -15,10 +14,13 @@ named!(pub parse_single_fasta<&[u8], Record>,
     do_parse!(
         tag!(">") >>
         id: map_res!(not_line_ending, str::from_utf8) >> line_ending >>
-        seq: is_not!(">") >> peek!(tag!(">")) >> 
+        seq: many1!(do_parse!(
+            s: map!(not_line_ending, deref) >> 
+            line_ending >> (s)
+        )) >> 
         (Record{ 
             id: String::from(id.trim()), 
-            seq: seq.iter().filter(|b| **b != '\n' as u8).map(|b| *b).collect::<Vec<u8>>(),
+            seq: seq.into_iter().flatten().collect::<Vec<u8>>(),
             qual: None,
         })
     )
@@ -54,7 +56,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_parse_fasta() {
-        let bytes = b">id1 desc \nTTTTTT\nAAAAAA\n>id2\nGGGGGG\nCCCCCC\n>";
+        let bytes = b">id1 desc \nTTTTTT\nAAAAAA\n>id2\nGGGGGG\nCCCCCC\n";
         let (rest, record1) = parse_single_fasta(bytes).unwrap();
         let (_, record2) = parse_single_fasta(rest).unwrap();
         let rec1 = Record{id:String::from("id1 desc"), seq: b"TTTTTTAAAAAA".to_vec(), qual: None};

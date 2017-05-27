@@ -1,5 +1,5 @@
 [package]
-name = "fastx-reader"
+name = "fastx"
 version = "0.1.0"
 authors = ["Erik Clarke <erikclarke@fastmail.com>"]
 
@@ -10,3 +10,6 @@ itertools="*"
 [dependencies.nom]
 version="3.0"
 features=["regexp_macros", "regexp"]
+
+[dev-dependencies]
+bio="0.13"

@@ -1,15 +1,16 @@
 [package]
 name = "fastx"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Erik Clarke <erikclarke@fastmail.com>"]
+description = "Fast, flexible FASTA+FASTQ parser library"
+license = "MIT"
+repository = "https://github.com/eclarke/fastx"
+readme = "README.md"
+exclude = ["tests/*"]
 
 [dependencies]
-regex="*"
-itertools="*"
-
-[dependencies.nom]
-version="3.0"
-features=["regexp_macros", "regexp"]
+itertools="0.6"
+nom="3.0"
 
 [dev-dependencies]
 bio="0.13"

@@ -1,7 +1,7 @@
 use std::str;
 use itertools::Itertools;
 
-use nom::{not_line_ending, line_ending, rest};
+use nom::{not_line_ending, line_ending};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Record {

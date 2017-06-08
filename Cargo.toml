@@ -11,6 +11,10 @@ exclude = ["tests/*"]
 [dependencies]
 itertools="0.6"
 nom="3.0"
+error-chain="*"
 
 [dev-dependencies]
 bio="0.13"
+
+[profile.release]
+debug=true

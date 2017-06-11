@@ -9,31 +9,33 @@ use nom::IResult;
 mod internals;
 use internals::*;
 pub use internals::Record;
+use itertools::Itertools;
 
 error_chain! {
     errors { ParserFinished }
     foreign_links {
-        
+        Io(::std::io::Error);
     }
 }
 
 pub struct Sequences<R: io::BufRead> {
+    line: Vec<u8>,
     input: R,
-    parser: fn(&mut R, &mut Record) -> Result<()>
+    parser: fn(&mut R, &mut Record, &mut Vec<u8>) -> Result<()>
 }
 
 impl<'a, R: io::BufRead> Sequences<R> {
     pub fn from_fasta(input: R) -> Sequences<R> {
-        // let mut input = input;
-        // input.read_until(FA_REC, &mut Vec::new()).expect("fasta parser: error while reading input!");
         Sequences {
+            line: Vec::new(),
             input, 
-            parser: read_fasta
+            parser: read_fasta2
         }
     }
 
     pub fn from_fastq(input: R) -> Sequences<R> {
         Sequences {
+            line: Vec::new(),
             input,
             parser: read_fastq
         }
@@ -49,71 +51,42 @@ impl<R: io::BufRead> Iterator for Sequences<R> {
     type Item = Record;
 
     fn next(&mut self) -> Option<Record> {
-        let mut record = Record{ id: String::new(), seq: Vec::new(), qual: None };
-        match (self.parser)(&mut self.input, &mut record) {
-            Ok(_) => Some(record),
+        let mut record = Record::new();
+        match (self.parser)(&mut self.input, &mut record, &mut self.line) {
+            Ok(()) if record.is_empty() => None,
+            Ok(()) => Some(record),
             Err(_) => None,
         }
     }
 }
 
-fn read_fasta<R: io::BufRead>(reader: &mut R, record: &mut Record) -> Result<()> {
-    let mut buf: Vec<u8> = Vec::new();
-    let mut parsed_id = false;
-    reader.read_until(b'>', &mut buf).unwrap();
-    if !buf.ends_with(b">") {
-        bail!("couldn't find record start in sequence");
-    }
-    // Parse ID string
-    while !parsed_id {
-        let mut bytes_read = 0;
-        {
-            let ibuf = reader.fill_buf().unwrap();
-            if ibuf.len() == 0 {
-                bail!("error parsing fasta: no sequence found");
-            }
-            for byte in ibuf {
-                if *byte != b'\n' {
-                    bytes_read += 1;
-                    record.id.push(*byte as char);
-                } else {
-                    parsed_id = true;
-                    bytes_read += 1;
-                    break;
-                }
-            }
+fn read_fasta2<R: io::BufRead>(reader: &mut R, record: &mut Record, line: &mut Vec<u8>) -> Result<()> {
+    record.clear();
+    if line.is_empty() {
+        reader.read_until(b'\n', line)?;
+        if line.is_empty() {
+            return Ok(());
         }
-        reader.consume(bytes_read);
     }
 
-    // Parse sequence, ending on EOF or > and skipping newlines
-    let mut parsed_seq = false;
-    while !parsed_seq {
-        let mut bytes_read = 0;
-        {
-            let ibuf = reader.fill_buf().unwrap();
-            if ibuf.len() == 0 {
-                parsed_seq = true;
-            }
-            for byte in ibuf {
-                bytes_read += 1;
-                match *byte {
-                    b'>' => { 
-                        bytes_read -= 1;
-                        parsed_seq = true;
-                        break;
-                    },
-                    b'\n' => continue,
-                    _ => record.seq.push(*byte),
-                }
-            }
+    if !line.starts_with(b">") {
+        bail!("Expected > at record start.");
+    }
+    record.id = String::from_utf8(line[1..line.len()-1].to_vec()).unwrap();
+    loop {
+        line.clear();
+        reader.read_until(b'\n', line)?;
+        if line.is_empty() || line.starts_with(b">") {
+            break;
+        } else if line.ends_with(b"\n") {
+            line.pop();
         }
-        reader.consume(bytes_read);
+        record.seq.append(line);
     }
     Ok(())
 }
 
-fn read_fastq<R: io::BufRead>(reader: &mut R, record: &mut Record) -> Result<()> {
+fn read_fastq<R: io::BufRead>(reader: &mut R, record: &mut Record, line: &mut Vec<u8>) -> Result<()> {
     let mut buf: Vec<u8> = Vec::new();
     loop {
         let ibuf_len: usize;
@@ -170,28 +143,28 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn test_fastq_reader() {
-    //     let fq = BufReader::new(File::open("tests/test_data/test.fq").unwrap());
-    //     let mut records = Sequences::from_fastq(fq);
-    //     let rec1 = records.next().unwrap();
-    //     let rec2 = records.next().unwrap();
-    //     let rec3 = records.next().unwrap();
-    //     // assert_eq!(None, records.next());
-    //     assert_eq!(
-    //         rec1,
-    //         Record{
-    //             id: String::from("D00727:24:C90LYANXX:7:1109:1635:2137 1:N:0:AAGAGGCA+GTAAGGAG"),
-    //             seq: b"GTCCAGAGCTTCGGTATAACGCTTGATCGCCAATCATTTTCGGCGCAGGATCACTCGATGAGTAAG".to_vec(),
-    //             qual: Some(b"IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII".to_vec())
-    //         }
-    //     );
-    //     assert_eq!(
-    //         rec2.id, String::from("D00727:24:C90LYANXX:7:1109:3587:2117 1:N:0:AAGAGGCA+GTAAGGAG")
-    //     );
-    //     assert_eq!(
-    //         rec3.seq.len(), 206
-    //     );
-    // }
+    #[test]
+    fn test_fastq_reader() {
+        let fq = BufReader::new(File::open("tests/test_data/test.fq").unwrap());
+        let mut records = Sequences::from_fastq(fq);
+        let rec1 = records.next().unwrap();
+        let rec2 = records.next().unwrap();
+        let rec3 = records.next().unwrap();
+        // assert_eq!(None, records.next());
+        assert_eq!(
+            rec1,
+            Record{
+                id: String::from("D00727:24:C90LYANXX:7:1109:1635:2137 1:N:0:AAGAGGCA+GTAAGGAG"),
+                seq: b"GTCCAGAGCTTCGGTATAACGCTTGATCGCCAATCATTTTCGGCGCAGGATCACTCGATGAGTAAG".to_vec(),
+                qual: Some(b"IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII".to_vec())
+            }
+        );
+        assert_eq!(
+            rec2.id, String::from("D00727:24:C90LYANXX:7:1109:3587:2117 1:N:0:AAGAGGCA+GTAAGGAG")
+        );
+        assert_eq!(
+            rec3.seq.len(), 206
+        );
+    }
 
 }

@@ -41,19 +41,19 @@ fn rustbio_fasta(b: &mut test::Bencher) {
 }
 
 
-// #[bench]
-// fn fastx_fastq(b: &mut test::Bencher) {
-//     let mut data = String::new();
-//     let mut file = File::open("tests/test_data/test.fq").unwrap();
-//     file.read_to_string(&mut data);
-//     b.iter(|| {
-//         let records = Sequences::from_fastq(data.as_bytes());
-//         let mut x = 0;
-//         for record in records {
-//             x += record.seq.len();
-//         }
-//     })
-// }
+#[bench]
+fn fastx_fastq(b: &mut test::Bencher) {
+    let mut data = String::new();
+    let mut file = File::open("tests/test_data/test.fq").unwrap();
+    file.read_to_string(&mut data);
+    b.iter(|| {
+        let records = Sequences::from_fastq(data.as_bytes());
+        let mut x = 0;
+        for record in records {
+            x += record.seq.len();
+        }
+    })
+}
 
 #[bench]
 fn rustbio_fastq(b: &mut test::Bencher) {
